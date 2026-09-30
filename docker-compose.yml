@@ -1,0 +1,52 @@
+services:
+  database:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: impact_ledger
+      POSTGRES_USER: impact
+      POSTGRES_PASSWORD: impact-local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U impact -d impact_ledger"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - impact-ledger-db:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://impact:impact-local@database:5432/impact_ledger
+      JWT_SECRET: ${JWT_SECRET:-demo-only-change-before-deployment}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin-demo}
+      VIEWER_PASSWORD: ${VIEWER_PASSWORD:-viewer-demo}
+      IDENTITY_ENCRYPTION_KEY: ${IDENTITY_ENCRYPTION_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-3-5-haiku-latest}
+      K_ANONYMITY_THRESHOLD: ${K_ANONYMITY_THRESHOLD:-3}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+
+volumes:
+  impact-ledger-db:
